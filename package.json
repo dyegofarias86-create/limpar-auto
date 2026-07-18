@@ -1,0 +1,15 @@
+{
+  "name": "limpar-system",
+  "version": "1.0.0",
+  "description": "LimpAr Auto — Sistema de Gestão Comercial",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "start": "cd backend && node server.js",
+    "dev:backend": "cd backend && node server.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install"
+  }
+}
