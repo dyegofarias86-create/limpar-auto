@@ -95,11 +95,11 @@ function processGastosRep(ws, repId, month, year, actorId, actorName) {
 
   // Save each category as an expense
   const expenseTypes = [
-    { key: 'REFEICAO',    category: 'Refeição', type: 'VIAGEM' },
-    { key: 'HOTEL',       category: 'Hotel', type: 'VIAGEM' },
-    { key: 'COMBUSTIVEL', category: 'Combustível', type: 'VIAGEM' },
-    { key: 'ALUGUEL',     category: 'Aluguel Veículo', type: 'FIXO' },
-    { key: 'OUTROS',      category: 'Outros', type: 'VIAGEM' },
+    { key: 'REFEICAO',    category: 'Refeição', type: 'representative' },
+    { key: 'HOTEL',       category: 'Hotel', type: 'representative' },
+    { key: 'COMBUSTIVEL', category: 'Combustível', type: 'representative' },
+    { key: 'ALUGUEL',     category: 'Aluguel Veículo', type: 'representative' },
+    { key: 'OUTROS',      category: 'Outros', type: 'representative' },
   ];
 
   for (const et of expenseTypes) {
@@ -239,12 +239,12 @@ function processProv(ws, repId, month, year) {
 
         if (existing) {
           const newBalance = provMes + saldoAnt - (existing.withdrawn || 0);
-          db.prepare('UPDATE provisions SET tmo_qty=?,revenue=?,provision_amount=?,current_balance=? WHERE id=?')
-            .run(qty, total, provMes, Math.max(0, newBalance), existing.id);
+          db.prepare('UPDATE provisions SET tmo_qty=?,provision_per_tmo=?,monthly_provision=?,total_provision=?,current_balance=? WHERE id=?')
+            .run(qty, provRate, provMes, provMes + saldoAnt, Math.max(0, newBalance), existing.id);
         } else {
           db.prepare(
-            'INSERT INTO provisions (representative_id,client_id,month,year,tmo_qty,revenue,provision_amount,previous_balance,withdrawn,current_balance) VALUES (?,?,?,?,?,?,?,?,0,?)'
-          ).run(client.representative_id || repId, client.id, month, year, qty, total, provMes, saldoAnt, provMes + saldoAnt);
+            'INSERT INTO provisions (representative_id,client_id,month,year,tmo_qty,provision_per_tmo,monthly_provision,previous_balance,withdrawn,current_balance) VALUES (?,?,?,?,?,?,?,?,0,?)'
+          ).run(client.representative_id || repId, client.id, month, year, qty, provRate, provMes, saldoAnt, provMes + saldoAnt);
         }
         results.saved++;
       }
