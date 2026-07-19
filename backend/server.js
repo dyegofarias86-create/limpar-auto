@@ -35,6 +35,7 @@ app.use('/api/clients', require('./routes/clients'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/onedrive', require('./routes/onedrive'));
 app.use('/api/notifications', require('./routes/notifications').router);
+app.use('/api/faturamento-upload', require('./routes/faturamento-upload'));
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));

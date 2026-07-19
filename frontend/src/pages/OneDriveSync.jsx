@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { api } from '../contexts/AuthContext';
 import {
   Cloud, Upload, Link, RefreshCw, CheckCircle, XCircle,
-  AlertCircle, TrendingUp, Users, FileSpreadsheet, Info
+  AlertCircle, TrendingUp, Users, FileSpreadsheet, Info, Table2
 } from 'lucide-react';
 
 const BRL = v => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`;
@@ -12,6 +12,13 @@ const TARGET_REPS = ['EDNILSON', 'DELIO', 'BASE MG', 'WALLACE', 'DANIELA', 'JACK
 export default function OneDriveSync() {
   const [mode, setMode] = useState('upload'); // 'upload' | 'url'
   const [period, setPeriod] = useState({ month: 6, year: 2026 }); // Começa em junho
+
+  // Planilha Faturamento mensal
+  const [fatFile, setFatFile]     = useState(null);
+  const [fatPeriod, setFatPeriod] = useState({ month: 6, year: 2026 });
+  const [fatLoading, setFatLoading] = useState(false);
+  const [fatResult, setFatResult]   = useState(null);
+  const fatFileRef = useRef();
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -61,6 +68,24 @@ export default function OneDriveSync() {
 
   const totalTMO = preview.reduce((a, b) => a + (b.tmo || 0), 0);
   const totalRevenue = preview.reduce((a, b) => a + (b.revenue || 0), 0);
+
+  async function handleFatUpload(file) {
+    if (!file) return;
+    if (!file.name.match(/\.(xlsx|xls)$/i)) return alert('Formato inválido. Use .xlsx ou .xls');
+    setFatFile(file);
+    setFatLoading(true); setFatResult(null);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('month', fatPeriod.month);
+    fd.append('year', fatPeriod.year);
+    try {
+      const r = await api.post('/faturamento-upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setFatResult({ success: true, data: r.data });
+      loadPreview();
+    } catch (e) {
+      setFatResult({ success: false, error: e.response?.data?.error || 'Erro ao processar' });
+    } finally { setFatLoading(false); }
+  }
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -313,6 +338,86 @@ export default function OneDriveSync() {
           </table>
         </div>
       )}
+
+      {/* ===== NOVA SEÇÃO: Upload Planilha Faturamento Mensal ===== */}
+      <div className="card overflow-hidden border-2 border-teal-200">
+        <div className="bg-teal-50 px-5 py-3 flex items-center gap-2 border-b border-teal-100">
+          <Table2 size={18} className="text-teal-600" />
+          <span className="font-semibold text-teal-800">Upload Planilha Faturamento Mensal</span>
+          <span className="ml-auto text-xs text-teal-600 bg-teal-100 px-2 py-0.5 rounded-full">Novo formato</span>
+        </div>
+
+        <div className="p-5">
+          <p className="text-sm text-gray-600 mb-4">
+            Faça upload da sua planilha mensal de faturamento (ex: <strong>faturamento-2026-06.xlsx</strong>).
+            O sistema importa automaticamente TMO e valor apenas dos seus representantes.
+          </p>
+
+          {/* Period */}
+          <div className="flex items-center gap-3 flex-wrap mb-4">
+            <span className="text-sm font-medium text-gray-600">Mês/Ano da planilha:</span>
+            <select className="input w-auto" value={fatPeriod.month} onChange={e => setFatPeriod(v => ({ ...v, month: +e.target.value }))}>
+              {MONTHS.map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
+            </select>
+            <select className="input w-auto" value={fatPeriod.year} onChange={e => setFatPeriod(v => ({ ...v, year: +e.target.value }))}>
+              {[2025,2026,2027].map(y => <option key={y}>{y}</option>)}
+            </select>
+          </div>
+
+          {/* Drop zone */}
+          <div
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => { e.preventDefault(); handleFatUpload(e.dataTransfer.files[0]); }}
+            onClick={() => fatFileRef.current?.click()}
+            className="border-2 border-dashed border-teal-300 rounded-xl p-8 text-center cursor-pointer hover:border-teal-500 hover:bg-teal-50 transition-colors"
+          >
+            <input ref={fatFileRef} type="file" accept=".xlsx,.xls" className="hidden"
+              onChange={e => handleFatUpload(e.target.files[0])} />
+            {fatLoading ? (
+              <div className="flex flex-col items-center gap-2 text-teal-600">
+                <RefreshCw size={24} className="animate-spin" />
+                <span className="text-sm">Processando...</span>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-gray-500">
+                <FileSpreadsheet size={32} className="text-teal-400" />
+                <p className="font-medium text-gray-700">Clique ou arraste o arquivo aqui</p>
+                <p className="text-xs text-gray-400">faturamento-2026-{String(fatPeriod.month).padStart(2,'0')}.xlsx</p>
+              </div>
+            )}
+          </div>
+
+          {/* Result */}
+          {fatResult && (
+            <div className={`mt-4 rounded-xl p-4 ${fatResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+              {fatResult.success ? (
+                <div className="flex items-start gap-3">
+                  <CheckCircle size={18} className="text-green-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-green-800">Importado com sucesso!</p>
+                    <p className="text-sm text-green-700 mt-1">
+                      <strong>{fatResult.data.savedRecords}</strong> registros salvos &nbsp;·&nbsp;
+                      {fatResult.data.skippedRecords} ignorados &nbsp;·&nbsp;
+                      {fatResult.data.deletedPrevious} registros anteriores substituídos
+                    </p>
+                    {fatResult.data.errors?.length > 0 && (
+                      <details className="mt-2">
+                        <summary className="text-xs text-green-600 cursor-pointer">Ver erros ({fatResult.data.errors.length})</summary>
+                        <ul className="text-xs text-red-600 mt-1">{fatResult.data.errors.map((e,i) => <li key={i}>{e}</li>)}</ul>
+                      </details>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-red-700">
+                  <XCircle size={16} /> <span className="text-sm">{fatResult.error}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
     </div>
   );
 }
