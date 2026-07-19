@@ -34,7 +34,7 @@ export default function Representatives() {
   const [reps, setReps]     = useState([]);
   const [selected, setSelected] = useState(null);
   const [detail, setDetail] = useState(null);
-  const [period, setPeriod] = useState({ month: 7, year: 2026 });
+  const [period, setPeriod] = useState({ month: 6, year: 2026 });
   const months = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
   useEffect(() => {

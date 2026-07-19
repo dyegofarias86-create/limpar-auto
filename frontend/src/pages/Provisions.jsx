@@ -117,7 +117,7 @@ export default function Provisions() {
   const [clients, setClients]    = useState([]);
   const [groups, setGroups]      = useState([]);
 
-  const [period, setPeriod]      = useState({ month: 7, year: 2026 });
+  const [period, setPeriod]      = useState({ month: 6, year: 2026 });
   const [filters, setFilters]    = useState({ rep_id: '', client_id: '', group_name: '' });
 
   const [withdrawModal, setWithdrawModal] = useState(null);
