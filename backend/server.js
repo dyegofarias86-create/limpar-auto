@@ -54,3 +54,24 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 LimpAr API rodando em http://localhost:${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/api/health`);
 });
+
+// One-time cleanup endpoint (protected by token)
+app.post('/api/admin/cleanup-dupes', (req, res) => {
+  const { token } = req.body;
+  if (token !== 'limpar-cleanup-2026') return res.status(403).json({ error: 'forbidden' });
+  try {
+    const { db } = require('./db/schema');
+    // Fix duplicate expenses: keep only most recent per rep/month/year/category
+    const cats = db.prepare('SELECT DISTINCT representative_id, month, year, category FROM expenses').all();
+    let deleted = 0;
+    for (const c of cats) {
+      const rows = db.prepare('SELECT id FROM expenses WHERE representative_id=? AND month=? AND year=? AND category=? ORDER BY id DESC').all(c.representative_id, c.month, c.year, c.category);
+      if (rows.length > 1) {
+        const toDelete = rows.slice(1).map(r => r.id);
+        for (const id of toDelete) { db.prepare('DELETE FROM expenses WHERE id=?').run(id); deleted++; }
+      }
+    }
+    const remaining = db.prepare('SELECT COUNT(*) as n FROM expenses').get();
+    res.json({ success: true, deleted, remaining: remaining.n });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
