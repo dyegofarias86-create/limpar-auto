@@ -109,7 +109,7 @@ function processGastosRep(ws, repId, month, year, actorId, actorName) {
       // Check if already exists
       const exists = db.prepare(
         'SELECT id FROM expenses WHERE representative_id=? AND month=? AND year=? AND category=?'
-      ).get(repId, month, year);
+      ).get(repId, month, year, et.category);
       if (exists) {
         db.prepare('UPDATE expenses SET amount=? WHERE id=?').run(amount, exists.id);
       } else {
