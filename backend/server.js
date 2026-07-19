@@ -54,17 +54,3 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 LimpAr API rodando em http://localhost:${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/api/health`);
 });
-
-// Temp: cleanup test data endpoint
-app.post('/api/admin/cleanup-test', (req, res) => {
-  const { token } = req.body;
-  if (token !== 'limpar-cleanup-2026') return res.status(403).json({ error: 'forbidden' });
-  try {
-    const { db } = require('./db/schema');
-    // Delete ALL provisions (test data - reps will re-upload real planilhas)
-    const provDel = db.prepare('DELETE FROM provisions WHERE month=7 AND year=2026').run();
-    // Delete ALL expenses for July 2026 (test data)
-    const expDel = db.prepare('DELETE FROM expenses WHERE month=7 AND year=2026').run();
-    res.json({ success: true, provisionsDeleted: provDel.changes, expensesDeleted: expDel.changes });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
