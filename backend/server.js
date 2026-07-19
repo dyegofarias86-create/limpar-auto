@@ -54,3 +54,23 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 LimpAr API rodando em http://localhost:${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/api/health`);
 });
+
+// Temp cleanup v2
+app.post('/api/admin/cleanup-dupes', (req, res) => {
+  const { token } = req.body;
+  if (token !== 'limpar-cleanup-2026') return res.status(403).json({ error: 'forbidden' });
+  try {
+    const { db } = require('./db/schema');
+    const cats = db.prepare('SELECT DISTINCT representative_id, month, year, category FROM expenses').all();
+    let deleted = 0;
+    for (const c of cats) {
+      const rows = db.prepare('SELECT id FROM expenses WHERE representative_id=? AND month=? AND year=? AND category=? ORDER BY id DESC').all(c.representative_id, c.month, c.year, c.category);
+      if (rows.length > 1) {
+        const toDelete = rows.slice(1).map(r => r.id);
+        for (const id of toDelete) { db.prepare('DELETE FROM expenses WHERE id=?').run(id); deleted++; }
+      }
+    }
+    const all = db.prepare('SELECT id,representative_id,month,year,category,amount FROM expenses ORDER BY id').all();
+    res.json({ success: true, deleted, records: all });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
