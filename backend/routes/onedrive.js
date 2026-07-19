@@ -136,16 +136,28 @@ function parseConsolidadoXlsx(filePath, filenameHint = '') {
     const rows = XLSX.utils.sheet_to_json(ws, { defval: null, header: 1 });
     if (!rows || rows.length < 2) continue;
 
-    // Find header row
+    // Find header row — supports both:
+    // Old format: RESPONSAVEL column (FATURAMENTO_GERAL_CONSOLIDADO)
+    // New format: REPRESENTANTE column (Planilha Faturamento Mensal)
     let headerIdx = -1;
     let normalizedHeaders = null;
+    let newFormat = false; // true = new monthly planilha format
     for (let i = 0; i < Math.min(15, rows.length); i++) {
       const row = rows[i];
       if (!row) continue;
       const nh = row.map(c => normalizeHeader(c));
-      if (nh.some(c => c.includes('RESPONSAVEL'))) {
+      // Old format: has column EXACTLY 'RESPONSAVEL' (not 'RESPONSAVEL FATURAMENTO')
+      if (nh.some(c => c === 'RESPONSAVEL')) {
         headerIdx = i;
         normalizedHeaders = nh;
+        newFormat = false;
+        break;
+      }
+      // New monthly format: has column EXACTLY 'REPRESENTANTE'
+      if (nh.some(c => c === 'REPRESENTANTE')) {
+        headerIdx = i;
+        normalizedHeaders = nh;
+        newFormat = true;
         break;
       }
     }
@@ -159,10 +171,16 @@ function parseConsolidadoXlsx(filePath, filenameHint = '') {
       }
       return -1;
     };
+    // Exact match (for columns like 'TMO' that could false-match 'AUTONOMO')
+    const colExact = (kw) => normalizedHeaders.findIndex(h => h === kw);
 
-    const respCol   = col('RESPONSAVEL');
-    const tmoCol    = col('QTD_TOTAL');   // TMO = total de todos os produtos (dutos+freio+sanitizante)
-    const revCol    = col('VLR_TOTAL', 'TOTAL', 'FATURAMENTO', 'RECEITA', 'VALOR');
+    // Column mappings differ by format
+    const respCol = newFormat ? colExact('REPRESENTANTE') : col('RESPONSAVEL');
+    const tmoCol  = newFormat ? colExact('TMO')           : col('QTD_TOTAL');   // TMO = total de todos os produtos
+    // New format: 'Faturamento (R$)' — match col that has FATURAMENTO and not RESPONSAVEL/FORMA
+    const revCol  = newFormat
+      ? normalizedHeaders.findIndex(h => h.includes('FATURAMENTO') && !h.includes('RESPONSAVEL') && !h.includes('FORMA'))
+      : col('VLR_TOTAL', 'TOTAL', 'FATURAMENTO', 'RECEITA', 'VALOR');
     const groupCol  = col('GRUPO');
     const dealerCol = col('CONCESSIONARIA');
     const storeCol  = col('LOJA');
@@ -184,6 +202,7 @@ function parseConsolidadoXlsx(filePath, filenameHint = '') {
 
       const tmo = tmoCol >= 0 ? (parseFloat(row[tmoCol]) || 0) : 0;
       const rev = revCol  >= 0 ? (parseFloat(row[revCol])  || 0) : 0;
+
 
       billing[canonical].tmo     += tmo;
       billing[canonical].revenue += rev;
