@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../contexts/AuthContext';
 import { useAuth } from '../contexts/AuthContext';
-import { DollarSign, TrendingDown, ArrowDownCircle, X, RotateCcw, Lock, Users, ChevronDown } from 'lucide-react';
+import { DollarSign, TrendingDown, ArrowDownCircle, X, RotateCcw, Lock, Users, ChevronDown, Trash2 } from 'lucide-react';
 import MultiSelect from '../components/MultiSelect';
 
 const BRL = v => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -117,7 +117,7 @@ export default function Provisions() {
   const [clients, setClients]    = useState([]);
   const [groups, setGroups]      = useState([]);
 
-  const [period, setPeriod]      = useState({ month: 6, year: 2026 });
+  const [period, setPeriod]      = useState({ month: new Date().getMonth()+1, year: new Date().getFullYear() });
   const [filters, setFilters]    = useState({ rep_id: '', client_id: '', group_name: '' });
 
   const [withdrawModal, setWithdrawModal] = useState(null);
@@ -155,6 +155,11 @@ export default function Provisions() {
     api.get('/representatives').then(r => setReps(r.data)).catch(() => {});
     api.get('/clients').then(r => setClients(r.data)).catch(() => {});
   }, []);
+
+  async function handleDeleteProvision(id) {
+    if (!confirm('Excluir este registro de provisão?')) return;
+    try { await api.delete(`/provisions/${id}`); load(); } catch(e) { alert('Erro ao excluir'); }
+  }
 
   async function handleWithdraw(form) {
     await api.post('/provisions/withdraw', {
@@ -328,11 +333,16 @@ export default function Provisions() {
                     <td className="table-cell text-right text-red-600">{BRL(row.withdrawn)}</td>
                     <td className="table-cell text-right font-bold text-green-600">{BRL(row.current_balance)}</td>
                     <td className="table-cell">
-                      {row.current_balance > 0 && (
-                        <button onClick={() => setWithdrawModal(row)} className="text-xs bg-teal-50 text-teal-700 hover:bg-teal-100 px-2 py-1 rounded-md font-medium flex items-center gap-1">
-                          <ArrowDownCircle size={12} /> Retirar
+                      <div className="flex items-center gap-1">
+                        {row.current_balance > 0 && (
+                          <button onClick={() => setWithdrawModal(row)} className="text-xs bg-teal-50 text-teal-700 hover:bg-teal-100 px-2 py-1 rounded-md font-medium flex items-center gap-1">
+                            <ArrowDownCircle size={12} /> Retirar
+                          </button>
+                        )}
+                        <button onClick={() => handleDeleteProvision(row.id)} className="text-gray-300 hover:text-red-500 transition-colors ml-1" title="Excluir">
+                          <Trash2 size={14} />
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}

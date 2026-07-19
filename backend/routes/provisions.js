@@ -173,4 +173,13 @@ router.get('/withdrawals', (req, res) => {
   res.json(data);
 });
 
+// DELETE single provision record
+router.delete('/:id', (req, res) => {
+  const { id } = req.params;
+  const existing = db.prepare('SELECT id FROM provisions WHERE id=?').get(id);
+  if (!existing) return res.status(404).json({ error: 'Provisão não encontrada' });
+  db.prepare('DELETE FROM provisions WHERE id=?').run(id);
+  res.json({ success: true });
+});
+
 module.exports = router;

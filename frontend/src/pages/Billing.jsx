@@ -15,7 +15,7 @@ export default function Billing() {
   const [reps, setReps]         = useState([]);
   const [groups, setGroups]     = useState([]);
   const [stores, setStores]     = useState([]);
-  const [period, setPeriod]     = useState({ months: [6], year: 2026 });
+  const [period, setPeriod]     = useState({ months: [new Date().getMonth()+1], year: new Date().getFullYear() });
   const [filters, setFilters]   = useState({ reps: [], groups: [], stores: [], search: '' });
 
   // For multi-rep filter: send first selected, else all

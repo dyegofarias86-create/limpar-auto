@@ -11,11 +11,11 @@ const TARGET_REPS = ['EDNILSON', 'DELIO', 'BASE MG', 'WALLACE', 'DANIELA', 'JACK
 
 export default function OneDriveSync() {
   const [mode, setMode] = useState('upload'); // 'upload' | 'url'
-  const [period, setPeriod] = useState({ month: 6, year: 2026 }); // Começa em junho
+  const [period, setPeriod] = useState({ month: new Date().getMonth()+1, year: new Date().getFullYear() }); // Começa em junho
 
   // Planilha Faturamento mensal
   const [fatFile, setFatFile]     = useState(null);
-  const [fatPeriod, setFatPeriod] = useState({ month: 6, year: 2026 });
+  const [fatPeriod, setFatPeriod] = useState({ month: new Date().getMonth()+1, year: new Date().getFullYear() });
   const [fatLoading, setFatLoading] = useState(false);
   const [fatResult, setFatResult]   = useState(null);
   const fatFileRef = useRef();

@@ -59,7 +59,7 @@ export default function Expenses() {
   const [data, setData]        = useState([]);
   const [summary, setSummary]  = useState([]);
   const [reps, setReps]        = useState([]);
-  const [period, setPeriod]    = useState({ month: 6, year: 2026 });
+  const [period, setPeriod]    = useState({ month: new Date().getMonth()+1, year: new Date().getFullYear() });
   const [filterRep, setFilterRep] = useState('');
   const [filterType, setFilterType] = useState('');
   const [showModal, setShowModal] = useState(false);

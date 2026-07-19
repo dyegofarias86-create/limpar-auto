@@ -34,7 +34,7 @@ export default function Dashboard() {
   const [mktSummary, setMktSummary]   = useState(null);
   const [reps, setReps]               = useState([]);
 
-  const [period, setPeriod]   = useState({ months: [6], year: 2026 });
+  const [period, setPeriod]   = useState({ months: [new Date().getMonth()+1], year: new Date().getFullYear() });
   const [selectedRep, setSelectedRep] = useState('');
 
   async function load() {
