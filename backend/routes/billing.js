@@ -26,7 +26,7 @@ router.get('/', (req, res) => {
     JOIN clients c ON b.client_id = c.id
     JOIN representatives r ON b.representative_id = r.id
     JOIN users u ON r.user_id = u.id
-    WHERE b.month IN (${placeholders}) AND b.year = ?${repCond}
+    WHERE b.month IN (${placeholders}) AND b.year = ? AND b.product IN ('SERVICOS','SERVICO','PRODUTO')${repCond}
     ORDER BY b.month, c.group_name, c.store_name
   `).all(...params);
   res.json(data);

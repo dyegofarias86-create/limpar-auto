@@ -23,7 +23,7 @@ router.get('/summary', (req, res) => {
   }
 
   // Faturamento
-  const billing   = db.prepare(`SELECT COALESCE(SUM(b.total),0) as total, COALESCE(SUM(b.qty),0) as tmo FROM billing b WHERE b.month = ? AND b.year = ?${repFilter}`).get(...params);
+  const billing   = db.prepare(`SELECT COALESCE(SUM(b.total),0) as total, COALESCE(SUM(b.qty),0) as tmo FROM billing b WHERE b.month = ? AND b.year = ? AND b.product IN ('SERVICOS','SERVICO','PRODUTO')${repFilter}`).get(...params);
   // Gastos
   const expParams = repFilter ? [m, y, rep_id] : [m, y];
   const expFilter = (role === 'representative' && rep_id) ? ' AND representative_id = ?' : '';
@@ -41,7 +41,7 @@ router.get('/summary', (req, res) => {
   const billingByGroup = db.prepare(`
     SELECT c.group_name, COALESCE(SUM(b.total),0) as total, COALESCE(SUM(b.qty),0) as tmo
     FROM billing b JOIN clients c ON b.client_id = c.id
-    WHERE b.month = ? AND b.year = ?${repFilter}
+    WHERE b.month = ? AND b.year = ? AND b.product IN ('SERVICOS','SERVICO','PRODUTO')${repFilter}
     GROUP BY c.group_name ORDER BY total DESC
   `).all(...params);
 
@@ -50,7 +50,7 @@ router.get('/summary', (req, res) => {
   for (let i = 5; i >= 0; i--) {
     let mm = m - i; let yy = y;
     while (mm <= 0) { mm += 12; yy--; }
-    const bil  = db.prepare(`SELECT COALESCE(SUM(b.total),0) as total FROM billing b WHERE b.month = ? AND b.year = ?${repFilter}`).get(...[mm, yy, ...(repFilter ? [rep_id] : [])]);
+    const bil  = db.prepare(`SELECT COALESCE(SUM(b.total),0) as total FROM billing b WHERE b.month = ? AND b.year = ? AND b.product IN ('SERVICOS','SERVICO','PRODUTO')${repFilter}`).get(...[mm, yy, ...(repFilter ? [rep_id] : [])]);
     const exp  = db.prepare(`SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE month = ? AND year = ?${expFilter}`).get(...[mm, yy, ...(expFilter ? [rep_id] : [])]);
     monthly.push({ label: `${MONTH_NAMES[mm-1]}/${yy}`, faturamento: bil.total, gastos: exp.total });
   }
@@ -75,8 +75,8 @@ router.get('/rep-comparison', (req, res) => {
   const reps = db.prepare(`SELECT r.id, u.name FROM representatives r JOIN users u ON r.user_id = u.id`).all();
 
   const data = reps.map(rep => {
-    const billing  = db.prepare(`SELECT COALESCE(SUM(total),0) as total, COALESCE(SUM(qty),0) as tmo FROM billing WHERE representative_id = ? AND month = ? AND year = ?`).get(rep.id, m, y);
-    const expenses = db.prepare(`SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE representative_id = ? AND month = ? AND year = ?`).get(rep.id, m, y);
+    const billing  = db.prepare(`SELECT COALESCE(SUM(total),0) as total, COALESCE(SUM(qty),0) as tmo FROM billing WHERE representative_id = ? AND month = ? AND year = ? AND product IN ('SERVICOS','SERVICO','PRODUTO')`).get(rep.id, m, y);
+    const expenses = db.prepare(`SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE representative_id = ? AND month = ? AND year = ? AND product IN ('SERVICOS','SERVICO','PRODUTO')`).get(rep.id, m, y);
     const pct = billing.total > 0 ? ((expenses.total / billing.total) * 100).toFixed(1) : 0;
     return {
       rep_name:    rep.name,
@@ -103,8 +103,8 @@ router.get('/monthly-by-rep', (req, res) => {
   const series = reps.map(rep => {
     const months = Array.from({ length: 12 }, (_, i) => {
       const mm  = i + 1;
-      const exp = db.prepare(`SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE representative_id = ? AND month = ? AND year = ?`).get(rep.id, mm, y);
-      const bil = db.prepare(`SELECT COALESCE(SUM(total),0) as total FROM billing WHERE representative_id = ? AND month = ? AND year = ?`).get(rep.id, mm, y);
+      const exp = db.prepare(`SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE representative_id = ? AND month = ? AND year = ? AND product IN ('SERVICOS','SERVICO','PRODUTO')`).get(rep.id, mm, y);
+      const bil = db.prepare(`SELECT COALESCE(SUM(total),0) as total FROM billing WHERE representative_id = ? AND month = ? AND year = ? AND product IN ('SERVICOS','SERVICO','PRODUTO')`).get(rep.id, mm, y);
       return { month: MONTH_NAMES[i], gastos: exp.total, faturamento: bil.total };
     });
     return { rep_name: rep.name, rep_id: rep.id, months };

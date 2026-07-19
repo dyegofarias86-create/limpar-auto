@@ -35,10 +35,10 @@ router.get('/:id/details', (req, res) => {
   const sellers = db.prepare(`SELECT s.id, u.name, u.email FROM sellers s JOIN users u ON s.user_id = u.id WHERE s.representative_id = ?`).all(id);
   const clients = db.prepare(`SELECT * FROM clients WHERE representative_id = ?`).all(id);
   
-  const expenses = db.prepare(`SELECT category, SUM(amount) as total FROM expenses WHERE representative_id = ? AND month = ? AND year = ? GROUP BY category`).all(id, month, year);
-  const billing = db.prepare(`SELECT COALESCE(SUM(total),0) as total, COALESCE(SUM(qty),0) as tmo FROM billing WHERE representative_id = ? AND month = ? AND year = ?`).get(id, month, year);
-  const provisions = db.prepare(`SELECT COALESCE(SUM(current_balance),0) as balance FROM provisions WHERE representative_id = ? AND month = ? AND year = ?`).get(id, month, year);
-  const mkt = db.prepare(`SELECT * FROM marketing_budget WHERE representative_id = ? AND month = ? AND year = ?`).get(id, month, year);
+  const expenses = db.prepare(`SELECT category, SUM(amount) as total FROM expenses WHERE representative_id = ? AND month = ? AND year = ? AND product IN ('SERVICOS','SERVICO','PRODUTO') GROUP BY category`).all(id, month, year);
+  const billing = db.prepare(`SELECT COALESCE(SUM(total),0) as total, COALESCE(SUM(qty),0) as tmo FROM billing WHERE representative_id = ? AND month = ? AND year = ? AND product IN ('SERVICOS','SERVICO','PRODUTO')`).get(id, month, year);
+  const provisions = db.prepare(`SELECT COALESCE(SUM(current_balance),0) as balance FROM provisions WHERE representative_id = ? AND month = ? AND year = ? AND product IN ('SERVICOS','SERVICO','PRODUTO')`).get(id, month, year);
+  const mkt = db.prepare(`SELECT * FROM marketing_budget WHERE representative_id = ? AND month = ? AND year = ? AND product IN ('SERVICOS','SERVICO','PRODUTO')`).get(id, month, year);
 
   res.json({ rep, sellers, clients, expenses, billing, provisions, marketing: mkt });
 });
