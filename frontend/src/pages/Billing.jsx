@@ -47,13 +47,15 @@ export default function Billing() {
     if (user?.role === 'leader') api.get('/representatives').then(r => setReps(r.data)).catch(() => {});
   }, []);
 
-  // Apply client-side multi-select filters
+  // Apply client-side multi-select filters (exclude legacy CONSOLIDADO records)
+  const VALID_PRODUCTS = ['SERVICOS', 'SERVICO', 'PRODUTO', null, undefined, ''];
   const filtered = data.filter(row => {
+    const prodOk = VALID_PRODUCTS.includes(row.product) || (row.product && !row.product.includes('CONSOLIDADO'));
     const repOk  = filters.reps.length === 0   || filters.reps.includes(String(row.representative_id || ''));
     const grpOk  = filters.groups.length === 0 || filters.groups.includes(row.group_name);
     const stoOk  = filters.stores.length === 0 || filters.stores.includes(row.store_name);
     const qOk    = !filters.search || row.store_name?.toLowerCase().includes(filters.search.toLowerCase()) || row.group_name?.toLowerCase().includes(filters.search.toLowerCase());
-    return repOk && grpOk && stoOk && qOk;
+    return prodOk && repOk && grpOk && stoOk && qOk;
   });
 
   const totalTMO      = filtered.reduce((a, b) => a + (b.qty || 0), 0);
