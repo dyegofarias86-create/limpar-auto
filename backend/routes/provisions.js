@@ -177,9 +177,20 @@ router.get('/withdrawals', (req, res) => {
 router.delete('/:id', (req, res) => {
   const { id } = req.params;
   const existing = db.prepare('SELECT id FROM provisions WHERE id=?').get(id);
-  if (!existing) return res.status(404).json({ error: 'Provisão não encontrada' });
+  if (!existing) return res.status(404).json({ error: 'Proviso não encontrada' });
   db.prepare('DELETE FROM provisions WHERE id=?').run(id);
   res.json({ success: true });
+});
+
+// DELETE all provisions for a specific month/year (reset before new upload)
+router.delete('/reset-month', (req, res) => {
+  if (req.user.role !== 'leader') return res.status(403).json({ error: 'Sem permissão' });
+  const { month, year } = req.query;
+  const m = parseInt(month);
+  const y = parseInt(year);
+  if (!m || !y) return res.status(400).json({ error: 'month e year são obrigatórios' });
+  const result = db.prepare('DELETE FROM provisions WHERE month = ? AND year = ?').run(m, y);
+  res.json({ success: true, deleted: result.changes });
 });
 
 module.exports = router;
