@@ -5,13 +5,15 @@ const router = express.Router();
 router.use(authMiddleware);
 
 router.get('/', (req, res) => {
-  const { year, rep_id } = req.query;
+  const { year, rep_id, month } = req.query;
   const y = parseInt(year) || new Date().getFullYear();
   const rid = rep_id || req.user.rep_id;
+  const m = parseInt(month) || 0;
 
   let cond = 'WHERE mb.year = ?';
   const params = [y];
   if (rid) { cond += ' AND mb.representative_id = ?'; params.push(rid); }
+  if (m > 0) { cond += ' AND mb.month = ?'; params.push(m); }
 
   const data = db.prepare(`
     SELECT mb.*, u.name as rep_name
@@ -40,6 +42,13 @@ router.post('/:id/request', (req, res) => {
   const newAvail = budget.available_budget - amount;
   db.prepare('UPDATE marketing_budget SET used_budget = ?, available_budget = ? WHERE id = ?').run(newUsed, newAvail, req.params.id);
   res.json({ success: true, new_balance: newAvail });
+});
+
+// Reset all marketing budgets (tmo_qty, total_budget, available_budget) to 0
+router.post('/reset-budgets', (req, res) => {
+  if (req.user.role !== 'leader') return res.status(403).json({ error: 'Sem permissão' });
+  db.prepare('UPDATE marketing_budget SET tmo_qty=0, total_budget=0, used_budget=0, available_budget=0').run();
+  res.json({ success: true });
 });
 
 router.get('/annual-summary', (req, res) => {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../contexts/AuthContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Megaphone, TrendingUp, Wallet, Plus, X } from 'lucide-react';
+import { Megaphone, TrendingUp, Wallet, Plus, X, Trash2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const BRL = v => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`;
@@ -11,6 +11,7 @@ export default function Marketing() {
   const [annual, setAnnual] = useState([]);
   const [budgets, setBudgets] = useState([]);
   const [year, setYear] = useState(2026);
+  const [month, setMonth] = useState(0); // 0 = todos os meses
   const [selectedBudget, setSelectedBudget] = useState(null);
   const [requests, setRequests] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -21,14 +22,21 @@ export default function Marketing() {
 
   async function load() {
     const repParam = rid ? `&rep_id=${rid}` : '';
+    const monthParam = month > 0 ? `&month=${month}` : '';
     const [ann, bud] = await Promise.all([
       api.get(`/marketing/annual-summary?year=${year}${repParam}`),
-      api.get(`/marketing?year=${year}${repParam}`)
+      api.get(`/marketing?year=${year}${repParam}${monthParam}`)
     ]);
     setAnnual(ann.data);
     setBudgets(bud.data);
   }
-  useEffect(() => { load(); }, [year]);
+  useEffect(() => { load(); }, [year, month]);
+
+  async function resetBudgets() {
+    if (!window.confirm('Zerar todas as Verbas Geradas e Disponíveis? Essa ação será revertida ao fazer upload da planilha.')) return;
+    await api.post('/marketing/reset-budgets');
+    load();
+  }
 
   async function loadRequests(id) {
     const r = await api.get(`/marketing/${id}/requests`);
@@ -58,10 +66,25 @@ export default function Marketing() {
           <h1 className="text-2xl font-bold text-gray-900">Verba de Marketing</h1>
           <p className="text-gray-500 text-sm">Controle de verba MKT (R$ 0,25 por TMO)</p>
         </div>
-        <div className="flex gap-2">
-          <select className="input w-auto" value={year} onChange={e => setYear(+e.target.value)}>
+        <div className="flex gap-2 flex-wrap">
+          <select className="input w-auto" value={month} onChange={e => { setMonth(+e.target.value); setSelectedBudget(null); }}>
+            <option value={0}>Todos os meses</option>
+            {['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].map((m, i) => (
+              <option key={i+1} value={i+1}>{m}</option>
+            ))}
+          </select>
+          <select className="input w-auto" value={year} onChange={e => { setYear(+e.target.value); setSelectedBudget(null); }}>
             {[2024,2025,2026].map(y => <option key={y}>{y}</option>)}
           </select>
+          {user?.role === 'leader' && (
+            <button
+              className="text-sm px-3 py-2 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 flex items-center gap-1.5 font-medium"
+              onClick={resetBudgets}
+              title="Zerar todas as verbas geradas e disponíveis"
+            >
+              <Trash2 size={14} /> Zerar Verbas
+            </button>
+          )}
         </div>
       </div>
 

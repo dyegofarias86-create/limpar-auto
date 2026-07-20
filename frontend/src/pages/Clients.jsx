@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../contexts/AuthContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, CheckCircle, XCircle, Search, Cloud, Plus, X, AlertCircle, Edit2, Save, ChevronDown } from 'lucide-react';
+import { Building2, CheckCircle, XCircle, Search, Cloud, Plus, X, AlertCircle, Edit2, Save, ChevronDown, Trash2 } from 'lucide-react';
 import MultiSelect from '../components/MultiSelect';
 
 export default function Clients() {
@@ -69,6 +69,12 @@ export default function Clients() {
     load();
   }
 
+  async function resetProvision() {
+    if (!window.confirm('Zerar Prov./TMO de todos os clientes? Essa ação será revertida ao fazer upload da planilha.')) return;
+    await api.post('/clients/reset-provision');
+    load();
+  }
+
   async function bulkReassign() {
     if (!bulkRep || selectedClients.size === 0) return;
     await api.post('/clients/reassign', {
@@ -130,6 +136,13 @@ export default function Clients() {
           {isLeader && (
             <button className="btn-primary text-sm" onClick={() => setShowAddModal(true)}>
               <Plus size={15} /> Novo Cliente
+            </button>
+            <button
+              className="text-sm px-3 py-2 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 flex items-center gap-1.5 font-medium"
+              onClick={resetProvision}
+              title="Zerar Prov./TMO de todos os clientes"
+            >
+              <Trash2 size={14} /> Zerar Prov./TMO
             </button>
           )}
         </div>

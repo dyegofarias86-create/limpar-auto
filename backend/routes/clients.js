@@ -29,6 +29,13 @@ router.put('/:id', (req, res) => {
   res.json({ success: true });
 });
 
+// Reset all provision_per_tmo to 0
+router.post('/reset-provision', (req, res) => {
+  if (req.user.role !== 'leader') return res.status(403).json({ error: 'Sem permissão' });
+  db.prepare('UPDATE clients SET provision_per_tmo = 0').run();
+  res.json({ success: true });
+});
+
 module.exports = router;
 
 // Bulk reassign clients to another representative
