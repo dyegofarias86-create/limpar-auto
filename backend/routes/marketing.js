@@ -60,8 +60,15 @@ router.get('/annual-summary', (req, res) => {
   const data = [];
   for (let m = 1; m <= 12; m++) {
     let row = { month: m, label: monthNames[m-1], tmo: 0, total: 0, used: 0, available: 0 };
-    const q = db.prepare(`SELECT * FROM marketing_budget WHERE year = ? AND month = ? AND representative_id = ?`).get(y, m, rid);
-    if (q) { row.tmo = q.tmo_qty; row.total = q.total_budget; row.used = q.used_budget; row.available = q.available_budget; }
+    if (rid) {
+      // Filtrar por representante específico
+      const q = db.prepare('SELECT * FROM marketing_budget WHERE year = ? AND month = ? AND representative_id = ?').get(y, m, rid);
+      if (q) { row.tmo = q.tmo_qty; row.total = q.total_budget; row.used = q.used_budget; row.available = q.available_budget; }
+    } else {
+      // Líder: somar todos os representantes
+      const q = db.prepare('SELECT COALESCE(SUM(tmo_qty),0) as tmo, COALESCE(SUM(total_budget),0) as total, COALESCE(SUM(used_budget),0) as used, COALESCE(SUM(available_budget),0) as available FROM marketing_budget WHERE year = ? AND month = ?').get(y, m);
+      if (q) { row.tmo = q.tmo; row.total = q.total; row.used = q.used; row.available = q.available; }
+    }
     data.push(row);
   }
   res.json(data);
