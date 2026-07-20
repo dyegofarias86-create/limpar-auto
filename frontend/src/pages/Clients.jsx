@@ -134,16 +134,18 @@ export default function Clients() {
             className="w-40"
           />
           {isLeader && (
-            <button className="btn-primary text-sm" onClick={() => setShowAddModal(true)}>
-              <Plus size={15} /> Novo Cliente
-            </button>
-            <button
-              className="text-sm px-3 py-2 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 flex items-center gap-1.5 font-medium"
-              onClick={resetProvision}
-              title="Zerar Prov./TMO de todos os clientes"
-            >
-              <Trash2 size={14} /> Zerar Prov./TMO
-            </button>
+            <>
+              <button className="btn-primary text-sm" onClick={() => setShowAddModal(true)}>
+                <Plus size={15} /> Novo Cliente
+              </button>
+              <button
+                className="text-sm px-3 py-2 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 flex items-center gap-1.5 font-medium"
+                onClick={resetProvision}
+                title="Zerar Prov./TMO de todos os clientes"
+              >
+                <Trash2 size={14} /> Zerar Prov./TMO
+              </button>
+            </>
           )}
         </div>
       </div>
