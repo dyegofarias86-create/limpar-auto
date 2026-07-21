@@ -65,17 +65,26 @@ app.get('/api/onedrive/preview', require('./middleware/auth').authMiddleware, (r
   res.json(data);
 });
 
-// Override: apos onedrive sync, zerar marketing_budget (sera preenchido pelas planilhas dos reps)
+// Override: apos onedrive sync, sincronizar SERVICOS com CONSOLIDADO_ONEDRIVE + zerar marketing_budget
 app.post('/api/onedrive/sync-upload', require('./middleware/auth').authMiddleware, (req, res, next) => {
-  // Deixar o handler original processar, depois zerar marketing_budget
   const originalJson = res.json.bind(res);
   res.json = function(data) {
-    // Zerar marketing_budget apos sync bem-sucedido
     if (data && data.success) {
       try {
         const { db } = require('./db/schema');
+        // Zerar marketing_budget
         db.prepare('UPDATE marketing_budget SET tmo_qty=0, total_budget=0, used_budget=0, available_budget=0').run();
-      } catch(e) {}
+        // Substituir SERVICOS com os dados do CONSOLIDADO_ONEDRIVE mais recente
+        // Isso garante que tela Faturamento mostre os mesmos dados do Sync
+        const months = db.prepare('SELECT DISTINCT month, year FROM billing WHERE product=\'CONSOLIDADO_ONEDRIVE\'').all();
+        months.forEach(function(p) {
+          db.prepare('DELETE FROM billing WHERE month=? AND year=? AND product=\'SERVICOS\'').run(p.month, p.year);
+          const consolidado = db.prepare('SELECT * FROM billing WHERE month=? AND year=? AND product=\'CONSOLIDADO_ONEDRIVE\'').all(p.month, p.year);
+          const stmt = db.prepare('INSERT INTO billing (representative_id, client_id, product, unit_price, qty, total, month, year) VALUES (?,?,\'SERVICOS\',0,?,?,?,?)');
+          consolidado.forEach(function(r) { stmt.run(r.representative_id, r.client_id, r.qty, r.total, r.month, r.year); });
+        });
+        console.log('\u2705 SERVICOS sincronizado com CONSOLIDADO_ONEDRIVE');
+      } catch(e) { console.error('Sync SERVICOS erro:', e.message); }
     }
     return originalJson(data);
   };
@@ -87,7 +96,7 @@ app.use('/api/notifications', require('./routes/notifications').router);
 app.use('/api/faturamento-upload', require('./routes/faturamento-upload'));
 
 // Health check
-app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.16-route-order-fix' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.17-billing-sync' }));
 
 // Admin: deletar provisoes por mes (executa imediatamente no startup para limpar julho 2026)
 (function cleanupJulyProvisions() {
@@ -96,6 +105,31 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().t
     const r = db.prepare('DELETE FROM provisions WHERE month=7 AND year=2026').run();
     if (r.changes > 0) console.log(`✅ Cleanup: ${r.changes} provisoes de julho/2026 removidas`);
   } catch(e) { console.error('Cleanup erro:', e.message); }
+})();
+
+// Auto-cleanup: deletar SERVICOS billing antigos do build image no startup
+// Os dados corretos virao do upload do usuario via Sync Faturamento
+(function cleanupOldBilling() {
+  try {
+    const { db } = require('./db/schema');
+    // Verificar se existe CONSOLIDADO_ONEDRIVE (upload do usuario)
+    const hasSynced = db.prepare('SELECT COUNT(*) as n FROM billing WHERE product=\'CONSOLIDADO_ONEDRIVE\'').get();
+    if (!hasSynced || hasSynced.n === 0) {
+      // Sem dados do usuario ainda - deletar SERVICOS antigos do build image
+      const deleted = db.prepare('DELETE FROM billing WHERE product=\'SERVICOS\'').run();
+      if (deleted.changes > 0) console.log('\u2705 Cleanup startup: ' + deleted.changes + ' registros SERVICOS antigos removidos (aguardando upload)');
+    } else {
+      // Ja tem CONSOLIDADO_ONEDRIVE - sincronizar SERVICOS
+      const months = db.prepare('SELECT DISTINCT month, year FROM billing WHERE product=\'CONSOLIDADO_ONEDRIVE\'').all();
+      months.forEach(function(p) {
+        db.prepare('DELETE FROM billing WHERE month=? AND year=? AND product=\'SERVICOS\'').run(p.month, p.year);
+        const consolidado = db.prepare('SELECT * FROM billing WHERE month=? AND year=? AND product=\'CONSOLIDADO_ONEDRIVE\'').all(p.month, p.year);
+        const stmt = db.prepare('INSERT INTO billing (representative_id, client_id, product, unit_price, qty, total, month, year) VALUES (?,?,\'SERVICOS\',0,?,?,?,?)');
+        consolidado.forEach(function(r) { stmt.run(r.representative_id, r.client_id, r.qty, r.total, r.month, r.year); });
+      });
+      console.log('\u2705 Startup: SERVICOS sincronizado com CONSOLIDADO_ONEDRIVE');
+    }
+  } catch(e) { console.error('Cleanup billing erro:', e.message); }
 })();
 
 // Auto-cleanup: zerar marketing_budget no startup (serao preenchidos pelas planilhas dos representantes)
