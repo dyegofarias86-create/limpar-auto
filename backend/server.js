@@ -38,7 +38,34 @@ app.use('/api/notifications', require('./routes/notifications').router);
 app.use('/api/faturamento-upload', require('./routes/faturamento-upload'));
 
 // Health check
-app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.4-month-filter' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.5-admin-fix' }));
+
+// Admin: deletar provisoes por mes (executa imediatamente no startup para limpar julho 2026)
+(function cleanupJulyProvisions() {
+  try {
+    const { db } = require('./db/schema');
+    const r = db.prepare('DELETE FROM provisions WHERE month=7 AND year=2026').run();
+    if (r.changes > 0) console.log(`✅ Cleanup: ${r.changes} provisoes de julho/2026 removidas`);
+  } catch(e) { console.error('Cleanup erro:', e.message); }
+})();
+
+// Admin: filtro mes marketing (injetado inline no servidor)
+app.get('/api/marketing-month', (req, res) => {
+  const { authMiddleware } = require('./middleware/auth');
+  authMiddleware(req, res, () => {
+    const { db } = require('./db/schema');
+    const { year, month, rep_id } = req.query;
+    const y = parseInt(year) || new Date().getFullYear();
+    const m = parseInt(month) || 0;
+    const rid = rep_id || (req.user.role !== 'leader' ? req.user.rep_id : null);
+    let cond = 'WHERE mb.year = ?';
+    const params = [y];
+    if (rid) { cond += ' AND mb.representative_id = ?'; params.push(rid); }
+    if (m > 0) { cond += ' AND mb.month = ?'; params.push(m); }
+    const data = db.prepare(`SELECT mb.*, u.name as rep_name FROM marketing_budget mb JOIN representatives r ON mb.representative_id = r.id JOIN users u ON r.user_id = u.id ${cond} ORDER BY mb.month`).all(...params);
+    res.json(data);
+  });
+});
 
 // Serve React frontend in production
 if (IS_PROD) {
@@ -76,13 +103,13 @@ if (IS_PROD) {
           yearSel.dispatchEvent(ev2);
         });
         yearSel.parentElement.insertBefore(monthSel, yearSel);
-        // Interceptar fetch para injetar &month=
+        // Interceptar fetch para filtrar por mes usando endpoint dedicado
         if(!window.__fetchPatched){
           window.__fetchPatched=true;
           var origFetch=window.fetch;
           window.fetch=function(url,opts){
-            if(typeof url==='string' && url.includes('/api/marketing') && !url.includes('/api/marketing/') && window.__mktMonth && window.__mktMonth!=='0'){
-              url = url + (url.includes('?')?'&':'?') + 'month=' + window.__mktMonth;
+            if(typeof url==='string' && url.includes('/api/marketing') && !url.includes('/api/marketing/') && !url.includes('/api/marketing-month') && window.__mktMonth && window.__mktMonth!=='0'){
+              url = url.replace('/api/marketing', '/api/marketing-month') + (url.includes('?')?'&':'?') + 'month=' + window.__mktMonth;
             }
             return origFetch(url,opts);
           };
