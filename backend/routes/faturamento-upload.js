@@ -109,7 +109,7 @@ router.post('/', upload.single('file'), (req, res) => {
 
     let saved = 0, skipped = 0, errors = [];
 
-    // Delete ALL billing for this month/year (SERVICOS + CONSOLIDADO_ONEDRIVE + outros) para evitar duplicatas
+    // Delete ALL billing for this month/year para evitar duplicatas
     const deleted = db.prepare('DELETE FROM billing WHERE month=? AND year=?').run(m, y).changes;
     console.log(`Billing deletado antes do re-import: ${deleted} registros para ${m}/${y}`);
 
@@ -161,6 +161,22 @@ router.post('/', upload.single('file'), (req, res) => {
 
     // Cleanup temp file
     try { fs.unlinkSync(req.file.path); } catch(e) {}
+
+    // Apos importar SERVICOS, atualizar CONSOLIDADO_ONEDRIVE para bater com o mesmo total
+    // Isso garante que a tela Sync page mostre o mesmo numero que a tela Faturamento
+    try {
+      const repSums = {};
+      const allServicos = db.prepare('SELECT representative_id, SUM(qty) as tmo, SUM(total) as revenue FROM billing WHERE month=? AND year=? AND product=\'SERVICOS\' GROUP BY representative_id').all(m, y);
+      allServicos.forEach(r => { repSums[r.representative_id] = { tmo: r.tmo, revenue: r.revenue }; });
+      // Deletar CONSOLIDADO_ONEDRIVE antigo para esse periodo
+      db.prepare('DELETE FROM billing WHERE month=? AND year=? AND product=\'CONSOLIDADO_ONEDRIVE\'').run(m, y);
+      // Recriar CONSOLIDADO_ONEDRIVE com os mesmos valores do upload
+      const stmtConsolidado = db.prepare('INSERT INTO billing (representative_id, product, unit_price, qty, total, month, year) VALUES (?,\'CONSOLIDADO_ONEDRIVE\',0,?,?,?,?)');
+      for (const [repId, vals] of Object.entries(repSums)) {
+        stmtConsolidado.run(parseInt(repId), vals.tmo, vals.revenue, m, y);
+      }
+      console.log(`\u2705 CONSOLIDADO_ONEDRIVE sincronizado com SERVICOS: ${allServicos.length} reps para ${m}/${y}`);
+    } catch(e) { console.error('Erro ao sincronizar CONSOLIDADO_ONEDRIVE:', e.message); }
 
     res.json({
       success: true,
