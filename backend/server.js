@@ -58,7 +58,7 @@ app.use('/api/notifications', require('./routes/notifications').router);
 app.use('/api/faturamento-upload', require('./routes/faturamento-upload'));
 
 // Health check
-app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.9-mkt-rep-filter' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.10-multi-rep' }));
 
 // Admin: deletar provisoes por mes (executa imediatamente no startup para limpar julho 2026)
 (function cleanupJulyProvisions() {
@@ -113,66 +113,103 @@ if (IS_PROD) {
   app.get('*', (req, res) => {
     const indexPath = path.join(frontendDist, 'index.html');
     let html = fs.readFileSync(indexPath, 'utf8');
-    // Inject patch script for marketing month filter and provisions reset
+    // Inject patch script for marketing month/rep filter
     const patch = `<script>
 (function(){
-  var _obs = new MutationObserver(function(){
-    // ---- VERBA MKT: adicionar filtro de mes ----
-    var mktPage = document.querySelector('h1');
-    if(mktPage && mktPage.textContent.trim() === 'Verba de Marketing'){
-      var header = document.querySelector('h1')?.closest('div')?.parentElement?.querySelector('div.flex.gap-2, div.flex.items-center.justify-between > div:last-child');
-      // Procurar o seletor de ano (select com 2024/2025/2026)
-      var yearSel = Array.from(document.querySelectorAll('select')).find(s => Array.from(s.options).some(o=>o.text==='2026') && Array.from(s.options).some(o=>o.text==='2024'));
-      // Adicionar filtro de representante
-      if(yearSel && !yearSel.parentElement.querySelector('[data-rep-filter]')){
-        fetch('/api/representatives', {headers:{'Authorization':'Bearer '+localStorage.getItem('limpar_token')||''}}).then(r=>r.json()).then(reps=>{
-          var repSel = document.createElement('select');
-          repSel.setAttribute('data-rep-filter','1');
-          repSel.className = yearSel.className;
-          repSel.style.marginRight = '8px';
-          var allOpt = document.createElement('option'); allOpt.value=''; allOpt.textContent='Todos os reps'; repSel.appendChild(allOpt);
-          (Array.isArray(reps)?reps:[]).forEach(function(r){ var o=document.createElement('option'); o.value=r.id; o.textContent=r.name; repSel.appendChild(o); });
-          repSel.addEventListener('change', function(){ window.__mktRep = repSel.value; yearSel.dispatchEvent(new Event('change',{bubbles:true})); });
-          yearSel.parentElement.insertBefore(repSel, yearSel);
-        }).catch(function(){});
+  // Interceptar fetch para filtrar por mes/rep usando endpoint dedicado
+  if(!window.__fetchPatched){
+    window.__fetchPatched=true;
+    var origFetch=window.fetch;
+    window.fetch=function(url,opts){
+      if(typeof url==='string' && url.includes('/api/marketing') && !url.includes('/api/marketing/') && !url.includes('/api/marketing-month')){
+        var extra='';
+        if(window.__mktMonth && window.__mktMonth!=='0') extra+=(url.includes('?')||extra?'&':'?')+'month='+window.__mktMonth;
+        if(window.__mktReps && window.__mktReps.length===1) extra+=(url.includes('?')||extra?'&':'?')+'rep_id='+window.__mktReps[0];
+        if(extra){ url=url.replace('/api/marketing','/api/marketing-month')+extra; }
       }
-      if(yearSel && !yearSel.parentElement.querySelector('[data-month-filter]')){
-        var monthSel = document.createElement('select');
-        monthSel.setAttribute('data-month-filter','1');
-        monthSel.className = yearSel.className;
-        monthSel.style.marginRight = '8px';
-        var opts = [['0','Todos os meses'],['1','Janeiro'],['2','Fevereiro'],['3','Mar\u00e7o'],['4','Abril'],['5','Maio'],['6','Junho'],['7','Julho'],['8','Agosto'],['9','Setembro'],['10','Outubro'],['11','Novembro'],['12','Dezembro']];
-        opts.forEach(function(o){ var opt=document.createElement('option'); opt.value=o[0]; opt.textContent=o[1]; monthSel.appendChild(opt); });
-        monthSel.addEventListener('change', function(){
-          window.__mktMonth = monthSel.value;
-          // Forcar re-render disparando change no year select
-          yearSel.dispatchEvent(new Event('change', {bubbles:true}));
-          // Restaurar ano
-          var ev2 = new Event('change', {bubbles:true});
-          yearSel.dispatchEvent(ev2);
-        });
-        yearSel.parentElement.insertBefore(monthSel, yearSel);
-        // Interceptar fetch para filtrar por mes usando endpoint dedicado
-        if(!window.__fetchPatched){
-          window.__fetchPatched=true;
-          var origFetch=window.fetch;
-          window.fetch=function(url,opts){
-            if(typeof url==='string' && url.includes('/api/marketing') && !url.includes('/api/marketing/') && !url.includes('/api/marketing-month')){
-              var extra = '';
-              if(window.__mktMonth && window.__mktMonth!=='0') extra += (url.includes('?')||extra?'&':'?')+'month='+window.__mktMonth;
-              if(window.__mktRep) extra += (url.includes('?')||extra?'&':'?')+'rep_id='+window.__mktRep;
-              if(extra){ url = url.replace('/api/marketing','/api/marketing-month') + extra; }
-            }
-            return origFetch(url,opts);
-          };
-        }
-      }
+      return origFetch(url,opts);
+    };
+  }
+
+  function injectMktFilters(){
+    if(window.__mktInjected) return;
+    var yearSel=Array.from(document.querySelectorAll('select')).find(s=>Array.from(s.options).some(o=>o.text==='2026')&&Array.from(s.options).some(o=>o.text==='2024'));
+    if(!yearSel) return;
+    var container=yearSel.parentElement;
+    if(container.querySelector('[data-mkt-filters]')) return;
+    window.__mktInjected=true;
+
+    var wrapper=document.createElement('div');
+    wrapper.setAttribute('data-mkt-filters','1');
+    wrapper.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
+
+    // --- FILTRO MES ---
+    var monthSel=document.createElement('select');
+    monthSel.className=yearSel.className;
+    var mOpts=[['0','Todos os meses'],['1','Janeiro'],['2','Fevereiro'],['3','Mar\u00e7o'],['4','Abril'],['5','Maio'],['6','Junho'],['7','Julho'],['8','Agosto'],['9','Setembro'],['10','Outubro'],['11','Novembro'],['12','Dezembro']];
+    mOpts.forEach(function(o){var opt=document.createElement('option');opt.value=o[0];opt.textContent=o[1];monthSel.appendChild(opt);});
+    monthSel.addEventListener('change',function(){window.__mktMonth=monthSel.value;yearSel.dispatchEvent(new Event('change',{bubbles:true}));});
+    wrapper.appendChild(monthSel);
+
+    // --- MULTI-SELECT REPRESENTANTES ---
+    window.__mktReps=[];
+    var msd=document.createElement('div');
+    msd.style.cssText='position:relative;display:inline-block;';
+    var msbtn=document.createElement('button');
+    msbtn.type='button';
+    msbtn.textContent='Representantes \u25BE';
+    msbtn.style.cssText='padding:6px 12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;white-space:nowrap;min-width:160px;text-align:left;';
+    var msdrop=document.createElement('div');
+    msdrop.style.cssText='display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:9999;min-width:200px;max-height:280px;overflow-y:auto;padding:6px 0;';
+    msbtn.addEventListener('click',function(e){e.stopPropagation();msdrop.style.display=msdrop.style.display==='none'?'block':'none';});
+    document.addEventListener('click',function(){msdrop.style.display='none';});
+    msd.appendChild(msbtn); msd.appendChild(msdrop); wrapper.appendChild(msd);
+
+    function updateBtnLabel(){
+      var sel=window.__mktReps||[];
+      msbtn.textContent=sel.length===0?'Representantes \u25BE':(sel.length===1?window.__mktRepNames[sel[0]]||'1 rep':sel.length+' reps selecionados');
     }
-  });
-  _obs.observe(document.body, {childList:true, subtree:true});
-  // Rodar imediatamente tambem (para o caso da pagina ja estar carregada)
-  function tryInjectNow(){ var h=document.querySelector('h1'); if(h && h.textContent.trim()==='Verba de Marketing'){ _obs.disconnect(); _obs.takeRecords && _obs.takeRecords(); var fakeNode=document.createElement('span'); document.body.appendChild(fakeNode); document.body.removeChild(fakeNode); } }
-  if(document.readyState==='complete'){ setTimeout(tryInjectNow, 500); } else { window.addEventListener('load', function(){ setTimeout(tryInjectNow, 500); }); }
+    window.__mktRepNames={};
+    function buildRepList(reps){
+      // Opcao "Todos"
+      var allDiv=document.createElement('div');
+      allDiv.style.cssText='padding:8px 14px;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;';
+      allDiv.innerHTML='<input type="checkbox" id="mkt_rep_all" checked style="cursor:pointer"> <label for="mkt_rep_all" style="cursor:pointer">Todos os representantes</label>';
+      var allCb=allDiv.querySelector('input');
+      allDiv.addEventListener('click',function(e){e.stopPropagation();allCb.checked=true;window.__mktReps=[];updateBtnLabel();msdrop.querySelectorAll('[data-rid]').forEach(function(cb){cb.checked=false;});yearSel.dispatchEvent(new Event('change',{bubbles:true}));});
+      msdrop.appendChild(allDiv);
+      // Divisor
+      var sep=document.createElement('div');sep.style.cssText='border-top:1px solid #f1f5f9;margin:4px 0;';msdrop.appendChild(sep);
+      // Cada rep
+      reps.forEach(function(rep,idx){
+        window.__mktRepNames[rep.id]=rep.name;
+        var d=document.createElement('div');
+        d.style.cssText='padding:8px 14px;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;';
+        var id='mkt_rep_'+rep.id;
+        d.innerHTML='<input type="checkbox" id="'+id+'" data-rid="'+rep.id+'" style="cursor:pointer"> <label for="'+id+'" style="cursor:pointer">'+rep.name+'</label>';
+        var cb=d.querySelector('input');
+        d.addEventListener('click',function(e){e.stopPropagation();cb.checked=!cb.checked;allCb.checked=false;
+          if(cb.checked){if(!window.__mktReps.includes(rep.id))window.__mktReps.push(rep.id);}
+          else{window.__mktReps=window.__mktReps.filter(function(r){return r!==rep.id;});}
+          if(window.__mktReps.length===0){allCb.checked=true;}
+          updateBtnLabel();yearSel.dispatchEvent(new Event('change',{bubbles:true}));
+        });
+        msdrop.appendChild(d);
+      });
+    }
+    // Buscar reps
+    var tok='';
+    try{var auth=JSON.parse(localStorage.getItem('limpar_auth')||'{}');tok=auth.token||'';}catch(e){}
+    if(!tok){var keys=Object.keys(localStorage);for(var i=0;i<keys.length;i++){if(keys[i].toLowerCase().includes('token')){tok=localStorage.getItem(keys[i]);if(tok&&tok.length>20)break;}}}
+    fetch('/api/representatives',{headers:{Authorization:'Bearer '+tok}}).then(function(r){return r.json();}).then(function(reps){if(Array.isArray(reps)&&reps.length>0)buildRepList(reps);}).catch(function(){});
+
+    // Inserir wrapper antes do yearSel
+    container.insertBefore(wrapper, yearSel);
+  }
+
+  var _obs=new MutationObserver(function(){ injectMktFilters(); });
+  _obs.observe(document.body,{childList:true,subtree:true});
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',function(){setTimeout(injectMktFilters,300);});}else{setTimeout(injectMktFilters,300);}
 })();
 <\/script>`;
     html = html.replace('</body>', patch + '</body>');
