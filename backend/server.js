@@ -58,7 +58,7 @@ app.use('/api/notifications', require('./routes/notifications').router);
 app.use('/api/faturamento-upload', require('./routes/faturamento-upload'));
 
 // Health check
-app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.8-reps-priority' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.9-mkt-rep-filter' }));
 
 // Admin: deletar provisoes por mes (executa imediatamente no startup para limpar julho 2026)
 (function cleanupJulyProvisions() {
@@ -68,6 +68,22 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().t
     if (r.changes > 0) console.log(`✅ Cleanup: ${r.changes} provisoes de julho/2026 removidas`);
   } catch(e) { console.error('Cleanup erro:', e.message); }
 })();
+
+// Admin: zerar marketing_budget (endpoint + auto-cleanup startup)
+(function cleanupMarketingBudget() {
+  try {
+    const { db } = require('./db/schema');
+    // Deletar registros de teste/temporarios onde nao houve upload oficial
+    // Nao deletar - apenas disponibilizar endpoint para o lider zerar via UI
+  } catch(e) {}
+})();
+
+app.post('/api/marketing/reset-budgets', require('./middleware/auth').authMiddleware, (req, res) => {
+  if (req.user.role !== 'leader') return res.status(403).json({ error: 'Sem permissao' });
+  const { db } = require('./db/schema');
+  db.prepare('UPDATE marketing_budget SET tmo_qty=0, total_budget=0, used_budget=0, available_budget=0').run();
+  res.json({ success: true });
+});
 
 // Admin: filtro mes marketing (injetado inline no servidor)
 app.get('/api/marketing-month', (req, res) => {
@@ -107,6 +123,19 @@ if (IS_PROD) {
       var header = document.querySelector('h1')?.closest('div')?.parentElement?.querySelector('div.flex.gap-2, div.flex.items-center.justify-between > div:last-child');
       // Procurar o seletor de ano (select com 2024/2025/2026)
       var yearSel = Array.from(document.querySelectorAll('select')).find(s => Array.from(s.options).some(o=>o.text==='2026') && Array.from(s.options).some(o=>o.text==='2024'));
+      // Adicionar filtro de representante
+      if(yearSel && !yearSel.parentElement.querySelector('[data-rep-filter]')){
+        fetch('/api/representatives', {headers:{'Authorization':'Bearer '+localStorage.getItem('limpar_token')||''}}).then(r=>r.json()).then(reps=>{
+          var repSel = document.createElement('select');
+          repSel.setAttribute('data-rep-filter','1');
+          repSel.className = yearSel.className;
+          repSel.style.marginRight = '8px';
+          var allOpt = document.createElement('option'); allOpt.value=''; allOpt.textContent='Todos os reps'; repSel.appendChild(allOpt);
+          (Array.isArray(reps)?reps:[]).forEach(function(r){ var o=document.createElement('option'); o.value=r.id; o.textContent=r.name; repSel.appendChild(o); });
+          repSel.addEventListener('change', function(){ window.__mktRep = repSel.value; yearSel.dispatchEvent(new Event('change',{bubbles:true})); });
+          yearSel.parentElement.insertBefore(repSel, yearSel);
+        }).catch(function(){});
+      }
       if(yearSel && !yearSel.parentElement.querySelector('[data-month-filter]')){
         var monthSel = document.createElement('select');
         monthSel.setAttribute('data-month-filter','1');
@@ -128,8 +157,11 @@ if (IS_PROD) {
           window.__fetchPatched=true;
           var origFetch=window.fetch;
           window.fetch=function(url,opts){
-            if(typeof url==='string' && url.includes('/api/marketing') && !url.includes('/api/marketing/') && !url.includes('/api/marketing-month') && window.__mktMonth && window.__mktMonth!=='0'){
-              url = url.replace('/api/marketing', '/api/marketing-month') + (url.includes('?')?'&':'?') + 'month=' + window.__mktMonth;
+            if(typeof url==='string' && url.includes('/api/marketing') && !url.includes('/api/marketing/') && !url.includes('/api/marketing-month')){
+              var extra = '';
+              if(window.__mktMonth && window.__mktMonth!=='0') extra += (url.includes('?')||extra?'&':'?')+'month='+window.__mktMonth;
+              if(window.__mktRep) extra += (url.includes('?')||extra?'&':'?')+'rep_id='+window.__mktRep;
+              if(extra){ url = url.replace('/api/marketing','/api/marketing-month') + extra; }
             }
             return origFetch(url,opts);
           };
