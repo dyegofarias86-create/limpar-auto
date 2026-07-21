@@ -58,7 +58,7 @@ app.use('/api/notifications', require('./routes/notifications').router);
 app.use('/api/faturamento-upload', require('./routes/faturamento-upload'));
 
 // Health check
-app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.12-spa-reinjection' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.13-no-dup-month' }));
 
 // Admin: deletar provisoes por mes (executa imediatamente no startup para limpar julho 2026)
 (function cleanupJulyProvisions() {
@@ -144,14 +144,7 @@ if (IS_PROD) {
     var wrapper=document.createElement('div');
     wrapper.setAttribute('data-mkt-filters','1');
     wrapper.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
-
-    // --- FILTRO MES ---
-    var monthSel=document.createElement('select');
-    monthSel.className=yearSel.className;
-    var mOpts=[['0','Todos os meses'],['1','Janeiro'],['2','Fevereiro'],['3','Mar\u00e7o'],['4','Abril'],['5','Maio'],['6','Junho'],['7','Julho'],['8','Agosto'],['9','Setembro'],['10','Outubro'],['11','Novembro'],['12','Dezembro']];
-    mOpts.forEach(function(o){var opt=document.createElement('option');opt.value=o[0];opt.textContent=o[1];monthSel.appendChild(opt);});
-    monthSel.addEventListener('change',function(){window.__mktMonth=monthSel.value;yearSel.dispatchEvent(new Event('change',{bubbles:true}));});
-    wrapper.appendChild(monthSel);
+    // Nao injeta filtro de mes - o componente React ja tem o proprio
 
     // --- MULTI-SELECT REPRESENTANTES ---
     window.__mktReps=[];
