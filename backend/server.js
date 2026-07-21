@@ -54,11 +54,25 @@ app.use('/api/agenda', require('./routes/agenda'));
 app.use('/api/clients', require('./routes/clients'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/onedrive', require('./routes/onedrive'));
+
+// Override: onedrive/preview usa SERVICOS (mesmo dado da tela Faturamento)
+// Garante que Sync page e Faturamento page mostrem o mesmo numero
+app.get('/api/onedrive/preview', require('./middleware/auth').authMiddleware, (req, res) => {
+  const { db } = require('./db/schema');
+  const m = parseInt(req.query.month) || new Date().getMonth() + 1;
+  const y = parseInt(req.query.year) || new Date().getFullYear();
+  // Tentar SERVICOS primeiro; fallback para CONSOLIDADO_ONEDRIVE
+  let data = db.prepare(`SELECT u.name as rep_name, SUM(b.qty) as tmo, SUM(b.total) as revenue FROM billing b JOIN representatives r ON b.representative_id = r.id JOIN users u ON r.user_id = u.id WHERE b.product = 'SERVICOS' AND b.month = ? AND b.year = ? GROUP BY b.representative_id ORDER BY revenue DESC`).all(m, y);
+  if (!data || data.length === 0) {
+    data = db.prepare(`SELECT u.name as rep_name, b.qty as tmo, b.total as revenue FROM billing b JOIN representatives r ON b.representative_id = r.id JOIN users u ON r.user_id = u.id WHERE b.product = 'CONSOLIDADO_ONEDRIVE' AND b.month = ? AND b.year = ? ORDER BY revenue DESC`).all(m, y);
+  }
+  res.json(data);
+});
 app.use('/api/notifications', require('./routes/notifications').router);
 app.use('/api/faturamento-upload', require('./routes/faturamento-upload'));
 
 // Health check
-app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.14-multimonth-prov-gastos' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.15-sync-fix' }));
 
 // Admin: deletar provisoes por mes (executa imediatamente no startup para limpar julho 2026)
 (function cleanupJulyProvisions() {
@@ -69,14 +83,12 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().t
   } catch(e) { console.error('Cleanup erro:', e.message); }
 })();
 
-// Auto-cleanup: zerar marketing_budget no startup (dados de teste foram zerados)
+// Auto-cleanup: zerar marketing_budget no startup (serao preenchidos pelas planilhas dos representantes)
 (function cleanupMarketingBudget() {
   try {
     const { db } = require('./db/schema');
-    // Zerar todos os valores de marketing_budget pois sao dados de teste
-    // Serao preenchidos novamente quando o usuario fizer upload da planilha oficial
     const r = db.prepare('UPDATE marketing_budget SET tmo_qty=0, total_budget=0, used_budget=0, available_budget=0').run();
-    if (r.changes > 0) console.log('\u2705 Cleanup: marketing_budget zerado (' + r.changes + ' registros) - aguardando upload oficial');
+    if (r.changes > 0) console.log('\u2705 Cleanup startup: marketing_budget zerado (' + r.changes + ' registros)');
   } catch(e) { console.error('Cleanup marketing erro:', e.message); }
 })();
 
@@ -260,9 +272,21 @@ if (IS_PROD) {
     }
   }
 
-  var _obs=new MutationObserver(function(){ injectMktFilters(); injectMultiMonthFilters(); });
+  // Rodar inject frequentemente para garantir que apareca antes do usuario clicar
+  var _obs=new MutationObserver(function(){
+    injectMktFilters();
+    injectMultiMonthFilters();
+  });
   _obs.observe(document.body,{childList:true,subtree:true});
-  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',function(){setTimeout(function(){injectMktFilters();injectMultiMonthFilters();},300);});}else{setTimeout(function(){injectMktFilters();injectMultiMonthFilters();},300);}
+  // Tambem rodar em intervalos curtos para pegar o momento certo
+  var _retryCount=0;
+  var _retryInterval=setInterval(function(){
+    injectMktFilters();
+    injectMultiMonthFilters();
+    _retryCount++;
+    if(_retryCount>20) clearInterval(_retryInterval); // para apos 2s
+  },100);
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',function(){setTimeout(function(){injectMktFilters();injectMultiMonthFilters();},50);});}else{setTimeout(function(){injectMktFilters();injectMultiMonthFilters();},50);}
 })();
 <\/script>`;
     html = html.replace('</body>', patch + '</body>');
