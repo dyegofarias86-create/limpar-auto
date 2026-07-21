@@ -58,7 +58,7 @@ app.use('/api/notifications', require('./routes/notifications').router);
 app.use('/api/faturamento-upload', require('./routes/faturamento-upload'));
 
 // Health check
-app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.11-cleanup-mkt' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.12-spa-reinjection' }));
 
 // Admin: deletar provisoes por mes (executa imediatamente no startup para limpar julho 2026)
 (function cleanupJulyProvisions() {
@@ -134,12 +134,12 @@ if (IS_PROD) {
   }
 
   function injectMktFilters(){
-    if(window.__mktInjected) return;
+    // Nao usa flag global - checa se elementos AINDA estao no DOM
+    // Isso permite re-injetar apos navegacao SPA (React unmount/remount)
     var yearSel=Array.from(document.querySelectorAll('select')).find(s=>Array.from(s.options).some(o=>o.text==='2026')&&Array.from(s.options).some(o=>o.text==='2024'));
     if(!yearSel) return;
     var container=yearSel.parentElement;
-    if(container.querySelector('[data-mkt-filters]')) return;
-    window.__mktInjected=true;
+    if(container.querySelector('[data-mkt-filters]')) return; // ja injetado e ainda no DOM
 
     var wrapper=document.createElement('div');
     wrapper.setAttribute('data-mkt-filters','1');
