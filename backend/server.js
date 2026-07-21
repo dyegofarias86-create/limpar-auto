@@ -58,7 +58,7 @@ app.use('/api/notifications', require('./routes/notifications').router);
 app.use('/api/faturamento-upload', require('./routes/faturamento-upload'));
 
 // Health check
-app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.10-multi-rep' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.11-cleanup-mkt' }));
 
 // Admin: deletar provisoes por mes (executa imediatamente no startup para limpar julho 2026)
 (function cleanupJulyProvisions() {
@@ -69,13 +69,15 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().t
   } catch(e) { console.error('Cleanup erro:', e.message); }
 })();
 
-// Admin: zerar marketing_budget (endpoint + auto-cleanup startup)
+// Auto-cleanup: zerar marketing_budget no startup (dados de teste foram zerados)
 (function cleanupMarketingBudget() {
   try {
     const { db } = require('./db/schema');
-    // Deletar registros de teste/temporarios onde nao houve upload oficial
-    // Nao deletar - apenas disponibilizar endpoint para o lider zerar via UI
-  } catch(e) {}
+    // Zerar todos os valores de marketing_budget pois sao dados de teste
+    // Serao preenchidos novamente quando o usuario fizer upload da planilha oficial
+    const r = db.prepare('UPDATE marketing_budget SET tmo_qty=0, total_budget=0, used_budget=0, available_budget=0').run();
+    if (r.changes > 0) console.log('\u2705 Cleanup: marketing_budget zerado (' + r.changes + ' registros) - aguardando upload oficial');
+  } catch(e) { console.error('Cleanup marketing erro:', e.message); }
 })();
 
 app.post('/api/marketing/reset-budgets', require('./middleware/auth').authMiddleware, (req, res) => {
