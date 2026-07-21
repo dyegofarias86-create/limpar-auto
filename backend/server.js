@@ -86,7 +86,7 @@ if (IS_PROD) {
     if(mktPage && mktPage.textContent.trim() === 'Verba de Marketing'){
       var header = document.querySelector('h1')?.closest('div')?.parentElement?.querySelector('div.flex.gap-2, div.flex.items-center.justify-between > div:last-child');
       // Procurar o seletor de ano (select com 2024/2025/2026)
-      var yearSel = Array.from(document.querySelectorAll('select')).find(s => s.querySelector('option[value="2026"]') && s.querySelector('option[value="2024"]'));
+      var yearSel = Array.from(document.querySelectorAll('select')).find(s => Array.from(s.options).some(o=>o.text==='2026') && Array.from(s.options).some(o=>o.text==='2024'));
       if(yearSel && !yearSel.parentElement.querySelector('[data-month-filter]')){
         var monthSel = document.createElement('select');
         monthSel.setAttribute('data-month-filter','1');
@@ -118,6 +118,9 @@ if (IS_PROD) {
     }
   });
   _obs.observe(document.body, {childList:true, subtree:true});
+  // Rodar imediatamente tambem (para o caso da pagina ja estar carregada)
+  function tryInjectNow(){ var h=document.querySelector('h1'); if(h && h.textContent.trim()==='Verba de Marketing'){ _obs.disconnect(); _obs.takeRecords && _obs.takeRecords(); var fakeNode=document.createElement('span'); document.body.appendChild(fakeNode); document.body.removeChild(fakeNode); } }
+  if(document.readyState==='complete'){ setTimeout(tryInjectNow, 500); } else { window.addEventListener('load', function(){ setTimeout(tryInjectNow, 500); }); }
 })();
 <\/script>`;
     html = html.replace('</body>', patch + '</body>');
