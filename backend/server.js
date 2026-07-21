@@ -38,7 +38,25 @@ app.use('/api/notifications', require('./routes/notifications').router);
 app.use('/api/faturamento-upload', require('./routes/faturamento-upload'));
 
 // Health check
-app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.5-admin-fix' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.7-reps-fix' }));
+
+// Fix: override representatives details sem filtro product (coluna nao existe em todas as tabelas)
+app.get('/api/representatives/:id/details', require('./middleware/auth').authMiddleware, (req, res) => {
+  try {
+    const { db } = require('./db/schema');
+    const { id } = req.params;
+    const { month = new Date().getMonth()+1, year = new Date().getFullYear() } = req.query;
+    const rep = db.prepare('SELECT r.id, u.name, u.email FROM representatives r JOIN users u ON r.user_id = u.id WHERE r.id = ?').get(id);
+    if (!rep) return res.status(404).json({ error: 'Representante nao encontrado' });
+    const sellers = db.prepare('SELECT s.id, u.name, u.email FROM sellers s JOIN users u ON s.user_id = u.id WHERE s.representative_id = ?').all(id);
+    const clients = db.prepare('SELECT * FROM clients WHERE representative_id = ?').all(id);
+    const expenses = db.prepare('SELECT category, SUM(amount) as total FROM expenses WHERE representative_id = ? AND month = ? AND year = ? GROUP BY category').all(id, month, year);
+    const billing = db.prepare('SELECT COALESCE(SUM(total),0) as total, COALESCE(SUM(qty),0) as tmo FROM billing WHERE representative_id = ? AND month = ? AND year = ?').get(id, month, year);
+    const provisions = db.prepare('SELECT COALESCE(SUM(current_balance),0) as balance FROM provisions WHERE representative_id = ? AND month = ? AND year = ?').get(id, month, year);
+    const mkt = db.prepare('SELECT * FROM marketing_budget WHERE representative_id = ? AND month = ? AND year = ?').get(id, month, year);
+    res.json({ rep, sellers, clients, expenses, billing, provisions, marketing: mkt });
+  } catch(e) { console.error('rep details error:', e.message); res.status(500).json({ error: e.message }); }
+});
 
 // Admin: deletar provisoes por mes (executa imediatamente no startup para limpar julho 2026)
 (function cleanupJulyProvisions() {
