@@ -109,8 +109,9 @@ router.post('/', upload.single('file'), (req, res) => {
 
     let saved = 0, skipped = 0, errors = [];
 
-    // Delete existing billing for this month/year to avoid duplicates
-    const deleted = db.prepare('DELETE FROM billing WHERE month=? AND year=? AND product=?').run(m, y, 'SERVICOS').changes;
+    // Delete ALL billing for this month/year (SERVICOS + CONSOLIDADO_ONEDRIVE + outros) para evitar duplicatas
+    const deleted = db.prepare('DELETE FROM billing WHERE month=? AND year=?').run(m, y).changes;
+    console.log(`Billing deletado antes do re-import: ${deleted} registros para ${m}/${y}`);
 
     const stmtBilling = db.prepare(`
       INSERT INTO billing (representative_id, client_id, product, unit_price, qty, total, month, year)

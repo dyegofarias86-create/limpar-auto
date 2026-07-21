@@ -58,7 +58,7 @@ app.use('/api/notifications', require('./routes/notifications').router);
 app.use('/api/faturamento-upload', require('./routes/faturamento-upload'));
 
 // Health check
-app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.13-no-dup-month' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.14-multimonth-prov-gastos' }));
 
 // Admin: deletar provisoes por mes (executa imediatamente no startup para limpar julho 2026)
 (function cleanupJulyProvisions() {
@@ -202,9 +202,67 @@ if (IS_PROD) {
     container.insertBefore(wrapper, yearSel);
   }
 
-  var _obs=new MutationObserver(function(){ injectMktFilters(); });
+  // ----- FILTRO MULTI-MES: Provisoes e Gastos -----
+  var MONTHS_PT = ['Janeiro','Fevereiro','Mar\u00e7o','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  function makeMultiMonthSelect(currentSel) {
+    // Se ja existe, nao duplicar
+    if (currentSel.parentElement.querySelector('[data-multi-month]')) return;
+    var wrapper = document.createElement('div');
+    wrapper.setAttribute('data-multi-month','1');
+    wrapper.style.cssText='position:relative;display:inline-block;';
+    var btn = document.createElement('button');
+    btn.type='button';
+    btn.style.cssText='padding:6px 10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;min-width:130px;text-align:left;';
+    var selMonths = [parseInt(currentSel.value)];
+    function updateBtnLabel() { btn.textContent = selMonths.length===1 ? MONTHS_PT[selMonths[0]-1] : selMonths.length+' meses \u25BE'; }
+    updateBtnLabel();
+    var drop = document.createElement('div');
+    drop.style.cssText='display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:9999;min-width:160px;max-height:320px;overflow-y:auto;padding:4px 0;';
+    btn.onclick=function(e){e.stopPropagation();drop.style.display=drop.style.display==='none'?'block':'none';};
+    document.addEventListener('click',function(){drop.style.display='none';});
+    MONTHS_PT.forEach(function(mName,idx){
+      var mNum=idx+1;
+      var row=document.createElement('div');
+      row.style.cssText='padding:7px 12px;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;';
+      var cb=document.createElement('input');cb.type='checkbox';
+      cb.checked=selMonths.includes(mNum);
+      var lbl=document.createElement('label');lbl.textContent=mName;lbl.style.cursor='pointer';
+      row.appendChild(cb);row.appendChild(lbl);
+      row.addEventListener('click',function(e){e.stopPropagation();cb.checked=!cb.checked;
+        if(cb.checked){if(!selMonths.includes(mNum))selMonths.push(mNum);}else{selMonths=selMonths.filter(function(x){return x!==mNum;});}
+        if(selMonths.length===0){selMonths=[mNum];cb.checked=true;}
+        updateBtnLabel();
+        // Disparar o select original com o primeiro mes selecionado (para acionar o re-render React)
+        var nativeSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'value').set;
+        nativeSetter.call(currentSel, String(selMonths[0]));
+        currentSel.dispatchEvent(new Event('change',{bubbles:true}));
+        // Guardar todos os meses para que o backend receba
+        window.__multiMonths=selMonths;
+      });
+      drop.appendChild(row);
+    });
+    wrapper.appendChild(btn);wrapper.appendChild(drop);
+    currentSel.style.display='none';
+    currentSel.parentElement.insertBefore(wrapper,currentSel);
+  }
+
+  function injectMultiMonthFilters() {
+    var h1=document.querySelector('h1');
+    if(!h1) return;
+    var pg=h1.textContent.trim();
+    if(pg==='Provi\u00f5es'||pg==='Gastos'){
+      // Encontrar o select de mes (que tem opcoes como Janeiro, Fevereiro, etc)
+      var sels=Array.from(document.querySelectorAll('select'));
+      var monthSel=sels.find(function(s){
+        return Array.from(s.options).some(function(o){return o.text==='Janeiro'||o.text==='Fevereiro'||o.text==='Junho';});
+      });
+      if(monthSel) makeMultiMonthSelect(monthSel);
+    }
+  }
+
+  var _obs=new MutationObserver(function(){ injectMktFilters(); injectMultiMonthFilters(); });
   _obs.observe(document.body,{childList:true,subtree:true});
-  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',function(){setTimeout(injectMktFilters,300);});}else{setTimeout(injectMktFilters,300);}
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',function(){setTimeout(function(){injectMktFilters();injectMultiMonthFilters();},300);});}else{setTimeout(function(){injectMktFilters();injectMultiMonthFilters();},300);}
 })();
 <\/script>`;
     html = html.replace('</body>', patch + '</body>');
