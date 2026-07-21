@@ -53,26 +53,41 @@ app.use('/api/marketing', require('./routes/marketing'));
 app.use('/api/agenda', require('./routes/agenda'));
 app.use('/api/clients', require('./routes/clients'));
 app.use('/api/upload', require('./routes/upload'));
-app.use('/api/onedrive', require('./routes/onedrive'));
-
-// Override: onedrive/preview usa SERVICOS (mesmo dado da tela Faturamento)
-// Garante que Sync page e Faturamento page mostrem o mesmo numero
+// Override ANTES do app.use onedrive: preview usa SERVICOS para bater com tela Faturamento
 app.get('/api/onedrive/preview', require('./middleware/auth').authMiddleware, (req, res) => {
   const { db } = require('./db/schema');
   const m = parseInt(req.query.month) || new Date().getMonth() + 1;
   const y = parseInt(req.query.year) || new Date().getFullYear();
-  // Tentar SERVICOS primeiro; fallback para CONSOLIDADO_ONEDRIVE
   let data = db.prepare(`SELECT u.name as rep_name, SUM(b.qty) as tmo, SUM(b.total) as revenue FROM billing b JOIN representatives r ON b.representative_id = r.id JOIN users u ON r.user_id = u.id WHERE b.product = 'SERVICOS' AND b.month = ? AND b.year = ? GROUP BY b.representative_id ORDER BY revenue DESC`).all(m, y);
   if (!data || data.length === 0) {
     data = db.prepare(`SELECT u.name as rep_name, b.qty as tmo, b.total as revenue FROM billing b JOIN representatives r ON b.representative_id = r.id JOIN users u ON r.user_id = u.id WHERE b.product = 'CONSOLIDADO_ONEDRIVE' AND b.month = ? AND b.year = ? ORDER BY revenue DESC`).all(m, y);
   }
   res.json(data);
 });
+
+// Override: apos onedrive sync, zerar marketing_budget (sera preenchido pelas planilhas dos reps)
+app.post('/api/onedrive/sync-upload', require('./middleware/auth').authMiddleware, (req, res, next) => {
+  // Deixar o handler original processar, depois zerar marketing_budget
+  const originalJson = res.json.bind(res);
+  res.json = function(data) {
+    // Zerar marketing_budget apos sync bem-sucedido
+    if (data && data.success) {
+      try {
+        const { db } = require('./db/schema');
+        db.prepare('UPDATE marketing_budget SET tmo_qty=0, total_budget=0, used_budget=0, available_budget=0').run();
+      } catch(e) {}
+    }
+    return originalJson(data);
+  };
+  next();
+});
+
+app.use('/api/onedrive', require('./routes/onedrive'));
 app.use('/api/notifications', require('./routes/notifications').router);
 app.use('/api/faturamento-upload', require('./routes/faturamento-upload'));
 
 // Health check
-app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.15-sync-fix' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString(), version: 'v2.16-route-order-fix' }));
 
 // Admin: deletar provisoes por mes (executa imediatamente no startup para limpar julho 2026)
 (function cleanupJulyProvisions() {
